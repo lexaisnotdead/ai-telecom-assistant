@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+.DS_Store
+
+.idea/
+.vscode/
+
+chroma_db/
+test_chroma_db/

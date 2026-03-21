@@ -1,0 +1,131 @@
+# Knowledge Base: Business Plans & Services
+
+## PLANS FOR MICROBUSINESS
+
+### "Start" Plan
+- Cost: $5.50/month
+- Minutes: 300 minutes to all networks
+- Data: 10 GB
+- SMS: 100 SMS
+- Best for: Sole proprietors, self-employed, 1–2 employees
+- Activation: Free upon contract signing
+
+### "Business" Plan
+- Cost: $13.50/month
+- Minutes: Unlimited within the carrier's network, 600 minutes to others
+- Data: 30 GB
+- SMS: 300 SMS
+- Corporate PBX: Included
+- Best for: Small businesses with up to 10 employees
+
+### "Team" Plan
+- Cost: $28.00/month per line
+- Minutes: Unlimited to all networks
+- Data: 50 GB + unlimited for corporate resources
+- Toll-Free (8-800) Number: Available
+- Virtual PBX: Enhanced version
+- Best for: Medium-sized businesses, HoReCa, retail
+
+---
+
+## SERVICES FOR HORECA
+
+### "Restaurant" Package
+- Virtual number for bookings
+- Integration with booking systems (YCLIENTS, ReServio)
+- Guest SMS-mailing: up to 1,000 SMS/month included
+- Call recording: 90-day storage
+- Cost: +$9.00/month (added to the main plan)
+
+### "Hotel" Package
+- Multi-channel number (up to 10 simultaneous calls)
+- Integration with PMS systems
+- Auto-attendant with scheduling
+- Call statistics
+- Cost: $16.50/month
+
+---
+
+## SERVICES FOR RETAIL
+
+### "Shop" Package
+- 8-800 Number (Toll-free for customers)
+- Mobile call forwarding
+- Interactive Voice Response (IVR)
+- CRM Integration: amoCRM, Bitrix24
+- Cost: $13.50/month
+
+### Terminals & Acquiring
+- Mobile internet for terminals: $1.10/month per device
+- Backup connection channel: +$2.20/month
+- Guaranteed SLA: 99.9%
+
+---
+
+## TECHNICAL SUPPORT
+
+### Support Levels
+- Basic (all plans): 9:00 AM – 9:00 PM, 4-hour response time
+- Priority ("Team" plan): 24/7, 1-hour response time
+- Dedicated Manager: Available for 50+ lines
+
+### Common Technical Issues
+
+#### No Internet Connection
+1.  Check your balance.
+2.  Restart the device.
+3.  Verify APN settings: `internet.carrier.com`
+4.  Call support: 8-800-XXX-XX-XX
+
+#### Outgoing/Incoming Calls Failing
+1.  Check signal strength (at least 2 bars required).
+2.  Ensure Airplane Mode is off.
+3.  Check call forwarding status: `*#21#`
+4.  Contact support with the specific error code.
+
+#### Virtual PBX Issues
+1.  Log in to the client portal: `lk.carrier.com`
+2.  Verify routing settings.
+3.  Ensure employee numbers are added correctly.
+4.  PBX Tech Support: `pbx-support@carrier.com`
+
+---
+
+## REGISTRATION & CONTRACTS
+
+### Documents for Legal Entities
+- Certificate of Registration
+- Tax ID
+- Power of Attorney (if not signed by the CEO)
+- Representative's Passport
+
+### Documents for Sole Proprietors
+- Passport
+- Tax ID
+- IP Registration Certificate 
+
+### Connection Lead Times
+- Mobile Services: Same day
+- Virtual PBX: 1–2 business days
+- Toll-Free (8-800) Number: 3–5 business days
+- Corporate Internet (Fiber): 5–14 days
+
+---
+
+## BILLING & PAYMENTS
+
+### Payment Methods
+- Bank transfer (via invoice)
+- Auto-pay via credit/debit card
+- Client portal (online payment)
+- Cash at service centers
+
+### Invoices & Reports
+- Invoices are issued on the 1st of every month.
+- Call logs: Available in the portal for the last 3 months.
+- VAT invoices/Completion certificates: Upon request or automatically via Electronic Document Interchange (EDI).
+
+### Arrears & Suspension
+- Warning: Sent 5 days before suspension.
+- Blocking: Occurs if debt is older than 30 days.
+- Restoration: Within 2 hours after payment is processed.
