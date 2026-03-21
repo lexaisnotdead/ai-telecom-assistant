@@ -2,13 +2,16 @@
 Dialog manager for history, context window, and session handling.
 Covers multi-turn conversations, context management, and history trimming.
 """
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 
 from src.prompts.templates import SYSTEM_PROMPT, INTENT_CLASSIFICATION_PROMPT
 from src.rag.retriever import TelecomRetriever
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,13 +77,17 @@ class DialogManager:
     def classify_intent(self, message: str) -> str:
         """Determine the client intent with few-shot classification."""
         prompt = INTENT_CLASSIFICATION_PROMPT.format(message=message)
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=20,
-        )
-        return response.choices[0].message.content.strip()
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=20,
+            )
+            return response.choices[0].message.content.strip()
+        except OpenAIError as e:
+            logger.error("Intent classification failed: %s", e)
+            return "other"
 
     def chat(self, session_id: str, user_message: str) -> dict:
         """
@@ -95,36 +102,44 @@ class DialogManager:
         # 2. Retrieve relevant context from RAG
         context = self.retriever.get_context(user_message, k=4)
 
-        # 3. Gather dialogue history
-        chat_history = session.get_history_text(last_n=6)
+        # 3. Build the system prompt with retrieved context
+        system_content = SYSTEM_PROMPT.format(context=context)
 
-        # 4. Build the system prompt with context
-        system_content = SYSTEM_PROMPT.format(
-            chat_history=chat_history,
-            context=context,
-        )
-
-        # 5. Build API messages
+        # 4. Build API messages
         messages = [{"role": "system", "content": system_content}]
 
-        # Add dialogue history (the first instruction is already in system)
+        # Add dialogue history as real conversation turns
         history = session.to_openai_format(max_messages=self.max_history)
         messages.extend(history)
 
         # Add the current user message
         messages.append({"role": "user", "content": user_message})
 
-        # 6. Call the model
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=600,
-        )
+        # 5. Call the model
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.temperature,
+                max_tokens=600,
+            )
+        except OpenAIError as e:
+            logger.error("Chat completion failed: %s", e)
+            session.add_message("user", user_message, intent=intent)
+            error_reply = "I'm sorry, I'm temporarily unavailable. Please try again in a moment."
+            session.add_message("assistant", error_reply)
+            return {
+                "reply": error_reply,
+                "intent": intent,
+                "context_used": "",
+                "session_id": session_id,
+                "turn": len(session.messages) // 2,
+                "tokens_used": 0,
+            }
 
         assistant_reply = response.choices[0].message.content
 
-        # 7. Save the exchange into session history
+        # 6. Save the exchange into session history
         session.add_message("user", user_message, intent=intent)
         session.add_message("assistant", assistant_reply)
 

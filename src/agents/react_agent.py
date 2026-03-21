@@ -8,6 +8,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
+from src.prompts.templates import AGENT_SYSTEM_PROMPT
 from src.rag.retriever import TelecomRetriever
 
 
@@ -38,7 +39,7 @@ def build_tools(retriever: TelecomRetriever) -> list:
         Input format: 'plan: Name, phone_numbers: N, months: M'"""
         plan_prices = {"start": 5.50, "business": 13.50, "team": 28.00}
         try:
-            parts = dict(p.strip().split(": ") for p in params.split(","))
+            parts = dict(p.strip().split(": ", 1) for p in params.split(","))
             plan = parts.get("plan", "").lower()
             count = int(parts.get("phone_numbers", 1))
             months = int(parts.get("months", 1))
@@ -109,12 +110,7 @@ def create_telecom_agent(retriever: TelecomRetriever):
     tools = build_tools(retriever)
     llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0).bind_tools(tools)
 
-    system_message = SystemMessage(content=(
-        "You are a telecom customer support assistant. "
-        "Use tools to find accurate information before answering. "
-        "Reply in English, briefly and directly. "
-        "Do not invent facts that are not supported by tool results."
-    ))
+    system_message = SystemMessage(content=AGENT_SYSTEM_PROMPT)
 
     # Node 1: call the LLM
     def agent_node(state: AgentState) -> AgentState:

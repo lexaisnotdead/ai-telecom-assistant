@@ -2,6 +2,7 @@
 RAG module for document indexing and semantic search.
 Covers chunking, embeddings, vector database storage, and retrieval.
 """
+import shutil
 from pathlib import Path
 from typing import List
 
@@ -25,8 +26,34 @@ class TelecomIndexer:
             separators=["\n## ", "\n### ", "\n\n", "\n", " "]
         )
 
-    def index_directory(self, data_dir: str) -> int:
+    def _has_existing_index(self) -> bool:
+        """Check whether the persist directory already contains indexed documents."""
+        try:
+            vectordb = Chroma(
+                persist_directory=self.persist_dir,
+                embedding_function=self.embeddings
+            )
+            return vectordb._collection.count() > 0
+        except Exception:
+            return False
+
+    def _prepare_persist_dir(self, overwrite: bool) -> None:
+        """Prepare the persist directory before indexing."""
+        persist_path = Path(self.persist_dir)
+
+        if overwrite and persist_path.exists():
+            shutil.rmtree(persist_path)
+            return
+
+        if self._has_existing_index():
+            raise ValueError(
+                f"Index already exists at '{self.persist_dir}'. "
+                "Use overwrite=True to rebuild it."
+            )
+
+    def index_directory(self, data_dir: str, overwrite: bool = False) -> int:
         """Index all `.txt` files from a directory."""
+        self._prepare_persist_dir(overwrite=overwrite)
         loader = DirectoryLoader(data_dir, glob="*.txt", loader_cls=TextLoader)
         documents = loader.load()
 
@@ -45,8 +72,14 @@ class TelecomIndexer:
         print(f"[RAG] Indexed {len(documents)} file(s), {len(chunks)} chunk(s)")
         return len(chunks)
 
-    def index_texts(self, texts: List[str], metadatas: List[dict] = None) -> int:
+    def index_texts(
+        self,
+        texts: List[str],
+        metadatas: List[dict] = None,
+        overwrite: bool = False,
+    ) -> int:
         """Index a list of texts directly."""
+        self._prepare_persist_dir(overwrite=overwrite)
         documents = [
             Document(page_content=t, metadata=m or {})
             for t, m in zip(texts, metadatas or [{}] * len(texts))

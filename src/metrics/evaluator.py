@@ -3,9 +3,12 @@ LLM answer quality evaluation.
 Covers faithfulness, relevance, completeness, tone, and A/B prompt testing.
 """
 import json
+import logging
 from dataclasses import dataclass, asdict
 from typing import List
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -85,14 +88,20 @@ Reply strictly in JSON:
   "notes": "short comment"
 }}"""
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": eval_prompt}],
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-
-        scores = json.loads(response.choices[0].message.content)
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": eval_prompt}],
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            scores = json.loads(response.choices[0].message.content)
+        except OpenAIError as e:
+            logger.error("Evaluation API call failed: %s", e)
+            scores = {}
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse evaluation JSON: %s", e)
+            scores = {}
 
         return EvalResult(
             question=question,
@@ -167,14 +176,17 @@ Which answer is better for a small business client? Consider:
 Reply in JSON:
 {{"winner": "A or B or tie", "reasoning": "explanation in 1-2 sentences"}}"""
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": compare_prompt}],
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-
-        result = json.loads(response.choices[0].message.content)
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": compare_prompt}],
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            result = json.loads(response.choices[0].message.content)
+        except (OpenAIError, json.JSONDecodeError) as e:
+            logger.error("A/B test API call failed: %s", e)
+            result = {}
 
         return ABTestResult(
             prompt_a_name=prompt_a_name,

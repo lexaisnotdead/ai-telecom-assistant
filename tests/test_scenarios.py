@@ -133,7 +133,14 @@ class TestDialogQuality:
         # The answer should acknowledge uncertainty instead of inventing a price
         assert any(
             phrase in reply
-            for phrase in ["no data", "not found", "please clarify", "no information", "cannot", "unavailable"]
+            for phrase in [
+                "i'm sorry, i don't have data on this matter",
+                "no data",
+                "not found",
+                "no information",
+                "cannot",
+                "unavailable",
+            ]
         ), f"The model should acknowledge uncertainty instead of inventing a price. Reply: {result['reply']}"
 
     def test_dialog_remembers_context(self, dialog_manager):

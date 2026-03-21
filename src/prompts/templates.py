@@ -22,9 +22,6 @@ RESPONSE FORMAT:
 - A step-by-step instruction if necessary.
 - At the end: a follow-up question or an offer of further assistance (optional).
 
-CONVERSATION HISTORY:
-{chat_history}
-
 KNOWLEDGE BASE CONTEXT:
 {context}
 """
@@ -108,7 +105,8 @@ If there are issues, fix them and return the corrected version.
 Add [CORRECTED] at the beginning of any modified response."""
 
 # =============================================================================
-# ReAct: Agent Prompt
+# ReAct: Agent Prompt (legacy text-based format, kept for reference)
+# NOTE: not used by the LangGraph agent — see AGENT_SYSTEM_PROMPT below.
 # =============================================================================
 
 REACT_SYSTEM_PROMPT = """You are an intelligent support agent for a telecommunications company.
@@ -132,6 +130,14 @@ Begin!
 
 Question: {input}
 Thought: {agent_scratchpad}"""
+
+# =============================================================================
+# LangGraph Agent Prompt (function-calling via bind_tools)
+# =============================================================================
+
+AGENT_SYSTEM_PROMPT = """You are a telecom customer support assistant.
+Use the available tools to find accurate information before answering.
+Reply briefly and directly. Do not invent facts not supported by tool results."""
 
 # =============================================================================
 # INDUSTRY-SPECIFIC PROMPTS: HoReCa & Retail
