@@ -1,4 +1,4 @@
-# Telecom LLM Assistant
+# AI Customer Support Assistant
 
 AI Customer Support Assistant for a telecommunications company.  
 
@@ -17,7 +17,7 @@ AI Customer Support Assistant for a telecommunications company.
 
 ```bash
 # 1. Clone and install dependencies
-git clone https://github.com/lexaisnotdead/telecom-assistant
+git clone https://github.com/lexaisnotdead/ai-telecom-assistant
 cd telecom-assistant
 pip install -r requirements.txt
 
