@@ -2,7 +2,7 @@
 title: Telecom Assistant
 emoji: 📞
 colorFrom: blue
-colorTo: slate
+colorTo: yellow
 sdk: gradio
 sdk_version: "6.10.0"
 python_version: "3.12"
