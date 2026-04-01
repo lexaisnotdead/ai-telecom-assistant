@@ -1,3 +1,15 @@
+---
+title: Telecom Assistant
+emoji: 📞
+colorFrom: blue
+colorTo: slate
+sdk: gradio
+sdk_version: "6.10.0"
+python_version: "3.12"
+app_file: app.py
+pinned: false
+---
+
 # AI Customer Support Assistant
 
 AI Customer Support Assistant for a telecommunications company.
