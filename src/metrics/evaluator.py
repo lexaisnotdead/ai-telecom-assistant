@@ -2,11 +2,22 @@
 LLM answer quality evaluation.
 Covers faithfulness, relevance, completeness, tone, and A/B prompt testing.
 """
+import os
 import json
 import logging
+import re
 from dataclasses import dataclass, asdict
 from typing import List
-from openai import OpenAI, OpenAIError
+
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:  # pragma: no cover - dependency is installed in deployment
+    class ChatGoogleGenerativeAI:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "langchain_google_genai is not installed. Install project dependencies "
+                "to enable Gemini-backed evaluation."
+            )
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +51,24 @@ class LLMEvaluator:
     This is a standard approach in production LLM systems.
     """
 
-    def __init__(self, model: str = "gpt-5.4-mini"):
-        self.client = OpenAI()
+    def __init__(self, model: str = None):
+        model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.client = ChatGoogleGenerativeAI(
+            model=model,
+            temperature=0,
+        )
         self.model = model
+
+    @staticmethod
+    def _parse_json_response(content: str) -> dict:
+        """Parse a JSON object even if the model adds surrounding text."""
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", content, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+            raise
 
     def evaluate_response(
         self,
@@ -54,53 +80,48 @@ class LLMEvaluator:
 
         eval_prompt = f"""Evaluate a telecom support assistant answer.
 
-CLIENT QUESTION:
-{question}
+        CLIENT QUESTION:
+        {question}
 
-KNOWLEDGE BASE CONTEXT (what the system knows):
-{context}
+        KNOWLEDGE BASE CONTEXT (what the system knows):
+        {context}
 
-ASSISTANT ANSWER:
-{answer}
+        ASSISTANT ANSWER:
+        {answer}
 
-Score the answer from 0.0 to 1.0 using these criteria:
+        Score the answer from 0.0 to 1.0 using these criteria:
 
-1. faithfulness: Are all facts in the answer supported by the context?
-   - 1.0 = everything comes from the context, nothing extra
-   - 0.0 = includes facts not found in the context (hallucinations)
+        1. faithfulness: Are all facts in the answer supported by the context?
+           - 1.0 = everything comes from the context, nothing extra
+           - 0.0 = includes facts not found in the context (hallucinations)
 
-2. relevance: Does the answer address the client question?
-   - 1.0 = fully answers the question
-   - 0.0 = off topic
+        2. relevance: Does the answer address the client question?
+           - 1.0 = fully answers the question
+           - 0.0 = off topic
 
-3. completeness: Does the client get enough information?
-   - 1.0 = the client gets everything needed
-   - 0.0 = incomplete answer or requires too many follow-up questions
+        3. completeness: Does the client get enough information?
+           - 1.0 = the client gets everything needed
+           - 0.0 = incomplete answer or requires too many follow-up questions
 
-4. tone_appropriate: Is the tone appropriate for a business client? (true/false)
+        4. tone_appropriate: Is the tone appropriate for a business client? (true/false)
 
-Reply strictly in JSON:
-{{
-  "faithfulness": 0.0-1.0,
-  "relevance": 0.0-1.0,
-  "completeness": 0.0-1.0,
-  "tone_appropriate": true/false,
-  "notes": "short comment"
-}}"""
+        Reply strictly in JSON:
+        {{
+          "faithfulness": 0.0-1.0,
+          "relevance": 0.0-1.0,
+          "completeness": 0.0-1.0,
+          "tone_appropriate": true/false,
+          "notes": "short comment"
+        }}"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": eval_prompt}],
-                temperature=0,
-                response_format={"type": "json_object"},
-            )
-            scores = json.loads(response.choices[0].message.content)
-        except OpenAIError as e:
-            logger.error("Evaluation API call failed: %s", e)
-            scores = {}
+            response = self.client.invoke(eval_prompt)
+            scores = self._parse_json_response(str(response.content))
         except json.JSONDecodeError as e:
             logger.error("Failed to parse evaluation JSON: %s", e)
+            scores = {}
+        except Exception as e:
+            logger.error("Evaluation API call failed: %s", e)
             scores = {}
 
         return EvalResult(
@@ -161,30 +182,28 @@ Reply strictly in JSON:
 
         compare_prompt = f"""You are an expert in support answer quality.
 
-Client question: {question}
-Context: {context}
+        Client question: {question}
+        Context: {context}
 
-{prompt_a_name}: {response_a}
+        {prompt_a_name}: {response_a}
 
-{prompt_b_name}: {response_b}
+        {prompt_b_name}: {response_b}
 
-Which answer is better for a small business client? Consider:
-- Information accuracy
-- Clarity and conciseness
-- Practical usefulness
+        Which answer is better for a small business client? Consider:
+        - Information accuracy
+        - Clarity and conciseness
+        - Practical usefulness
 
-Reply in JSON:
-{{"winner": "A or B or tie", "reasoning": "explanation in 1-2 sentences"}}"""
+        Reply in JSON:
+        {{"winner": "A or B or tie", "reasoning": "explanation in 1-2 sentences"}}"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": compare_prompt}],
-                temperature=0,
-                response_format={"type": "json_object"},
-            )
-            result = json.loads(response.choices[0].message.content)
-        except (OpenAIError, json.JSONDecodeError) as e:
+            response = self.client.invoke(compare_prompt)
+            result = self._parse_json_response(str(response.content))
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse A/B JSON: %s", e)
+            result = {}
+        except Exception as e:
             logger.error("A/B test API call failed: %s", e)
             result = {}
 

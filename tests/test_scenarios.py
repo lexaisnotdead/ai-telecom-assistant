@@ -10,6 +10,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+if not os.getenv("GOOGLE_API_KEY"):
+    pytest.skip("GOOGLE_API_KEY is not set; skipping live Gemini integration tests.", allow_module_level=True)
+
 
 # =============================================================================
 # Fixtures: test environment setup
@@ -29,7 +32,7 @@ def dialog_manager():
     if not retriever.is_ready():
         indexer.index_directory("./data")
 
-    return DialogManager(retriever=retriever, model="gpt-5.4-mini")
+    return DialogManager(retriever=retriever)
 
 
 @pytest.fixture(scope="session")

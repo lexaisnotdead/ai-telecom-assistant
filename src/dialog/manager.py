@@ -2,30 +2,52 @@
 Dialog manager for history, context window, and session handling.
 Covers multi-turn conversations, context management, and history trimming.
 """
+import os
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
-from openai import OpenAI, OpenAIError
+
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:  # pragma: no cover - dependency is installed in deployment
+    class ChatGoogleGenerativeAI:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "langchain_google_genai is not installed. Install project dependencies "
+                "to enable Gemini-backed dialogue."
+            )
 
 from src.prompts.templates import (
     SYSTEM_PROMPT,
-    INTENT_CLASSIFICATION_PROMPT,
-    CLIENT_TYPE_DETECTION_PROMPT,
     PLAN_RECOMMENDATION_PROMPT,
     SELF_CORRECTION_PROMPT,
     HORECA_SPECIALIST_PROMPT,
     RETAIL_SPECIALIST_PROMPT,
 )
 from src.rag.retriever import TelecomRetriever
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
 # Intents where factual accuracy is critical — run self-correction for these.
 _FACTUAL_INTENTS = {"plan_info", "billing", "connection", "porting"}
+_ENABLE_SELF_CORRECTION = os.getenv("ENABLE_SELF_CORRECTION", "false").lower() == "true"
 
 # Number of turns during which client type detection is attempted.
 _CLIENT_TYPE_DETECTION_TURNS = 3
+_INTENT_ALIASES = {
+    "plan info": "plan_info",
+    "plan_info": "plan_info",
+    "technical issue": "technical_issue",
+    "technical_issue": "technical_issue",
+    "billing": "billing",
+    "connection": "connection",
+    "porting": "porting",
+    "cancellation": "cancellation",
+    "other": "other",
+}
 
 
 @dataclass
@@ -57,10 +79,18 @@ class Session:
             lines.append(f"{prefix}: {msg.content}")
         return "\n".join(lines)
 
-    def to_openai_format(self, max_messages: int = 10) -> List[dict]:
-        """Convert history to the OpenAI API message format."""
+    def to_langchain_messages(self, max_messages: int = 10):
+        """Convert history to LangChain message objects."""
         recent = self.messages[-max_messages:]
-        return [{"role": m.role, "content": m.content} for m in recent]
+        messages = []
+        for msg in recent:
+            if msg.role == "user":
+                messages.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                messages.append(AIMessage(content=msg.content))
+            else:
+                messages.append(SystemMessage(content=msg.content))
+        return messages
 
     @property
     def turn_count(self) -> int:
@@ -88,11 +118,19 @@ class DialogManager:
     def __init__(
         self,
         retriever: TelecomRetriever,
-        model: str = "gpt-5.4-mini",
+        model: str = None,
         temperature: float = 0.3,
         max_history: int = 10,
     ):
-        self.client = OpenAI()
+        model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.client = ChatGoogleGenerativeAI(
+            model=model,
+            temperature=temperature,
+        )
+        self.control_client = ChatGoogleGenerativeAI(
+            model=model,
+            temperature=0,
+        )
         self.retriever = retriever
         self.model = model
         self.temperature = temperature
@@ -118,38 +156,34 @@ class DialogManager:
     # ------------------------------------------------------------------
 
     def classify_intent(self, message: str) -> str:
-        """Determine the client intent with few-shot classification."""
-        prompt = INTENT_CLASSIFICATION_PROMPT.format(message=message)
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=20,
-            )
-            return response.choices[0].message.content.strip()
-        except OpenAIError as e:
-            logger.error("Intent classification failed: %s", e)
-            return "other"
+        """Determine the client intent with a local keyword heuristic."""
+        text = message.lower()
+        rules = [
+            ("plan_info", [r"\bplan\b", r"\bprice\b", r"\bcost\b", r"\btariff\b", r"\bsubscription\b"]),
+            ("technical_issue", [r"\bno internet\b", r"\binternet.*not working\b", r"\bnetwork\b", r"\bterminal\b", r"\berror\b"]),
+            ("billing", [r"\bbill\b", r"\binvoice\b", r"\bcharged\b", r"\bpayment\b", r"\bdebt\b"]),
+            ("connection", [r"\bconnect\b", r"\bsetup\b", r"\bactivate\b", r"\binstall\b", r"\bnew number\b", r"\b8-800\b"]),
+            ("porting", [r"\btransfer\b", r"\bmnp\b", r"\bport\b", r"\bmove number\b"]),
+            ("cancellation", [r"\bcancel\b", r"\bdisable\b", r"\bdisconnect\b"]),
+        ]
+        for intent, patterns in rules:
+            if any(re.search(pattern, text) for pattern in patterns):
+                return intent
+        return "other"
 
     def _detect_client_type(self, message: str) -> Optional[str]:
         """
         Detect business type (horeca / retail) from a single message.
         Returns None if the type cannot be determined.
         """
-        prompt = CLIENT_TYPE_DETECTION_PROMPT.format(message=message)
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=10,
-            )
-            result = response.choices[0].message.content.strip().lower()
-            return result if result in ("horeca", "retail") else None
-        except OpenAIError as e:
-            logger.error("Client type detection failed: %s", e)
-            return None
+        text = message.lower()
+        horeca_keywords = ["restaurant", "cafe", "bar", "hotel", "hostel", "catering", "horeca"]
+        retail_keywords = ["shop", "store", "boutique", "pharmacy", "supermarket", "retail", "mall"]
+        if any(word in text for word in horeca_keywords):
+            return "horeca"
+        if any(word in text for word in retail_keywords):
+            return "retail"
+        return None
 
     # ------------------------------------------------------------------
     # System prompt routing
@@ -198,18 +232,16 @@ class DialogManager:
         Returns (final_reply, was_corrected).
         Falls back to the original reply on any API error.
         """
+        if not _ENABLE_SELF_CORRECTION:
+            return reply, False
+
         prompt = SELF_CORRECTION_PROMPT.format(response=reply, context=context)
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=700,
-            )
-            corrected = response.choices[0].message.content.strip()
+            response = self.control_client.invoke(prompt)
+            corrected = str(response.content).strip()
             was_corrected = corrected.startswith("[CORRECTED]")
             return corrected, was_corrected
-        except OpenAIError as e:
+        except Exception as e:
             logger.error("Self-correction failed: %s", e)
             return reply, False
 
@@ -243,19 +275,32 @@ class DialogManager:
         system_content = self._build_system_prompt(session, context, user_message, intent)
 
         # 5. Assemble API messages: system + history + current user turn
-        messages = [{"role": "system", "content": system_content}]
-        messages.extend(session.to_openai_format(max_messages=self.max_history))
-        messages.append({"role": "user", "content": user_message})
+        messages = [SystemMessage(content=system_content)]
+        messages.extend(session.to_langchain_messages(max_messages=self.max_history))
+        messages.append(HumanMessage(content=user_message))
 
         # 6. Call the model
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=self.temperature,
-                max_tokens=600,
-            )
-        except OpenAIError as e:
+            response = self.client.invoke(messages)
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                error_reply = (
+                    "The free Gemini quota for this project was exceeded. "
+                    "Please wait a bit and try again, or switch to a different Google project/key."
+                )
+                logger.error("Chat completion rate limited: %s", e)
+                session.add_message("user", user_message, intent=intent)
+                session.add_message("assistant", error_reply)
+                return {
+                    "reply": error_reply,
+                    "intent": intent,
+                    "client_type": session.client_type,
+                    "corrected": False,
+                    "context_used": "",
+                    "session_id": session_id,
+                    "turn": session.turn_count,
+                    "tokens_used": 0,
+                }
             logger.error("Chat completion failed: %s", e)
             session.add_message("user", user_message, intent=intent)
             error_reply = "I'm sorry, I'm temporarily unavailable. Please try again in a moment."
@@ -271,8 +316,13 @@ class DialogManager:
                 "tokens_used": 0,
             }
 
-        assistant_reply = response.choices[0].message.content
-        tokens_used = response.usage.total_tokens
+        assistant_reply = str(response.content)
+        usage = getattr(response, "usage_metadata", {}) or {}
+        tokens_used = int(
+            usage.get("total_tokens")
+            or (usage.get("input_tokens", 0) + usage.get("output_tokens", 0))
+            or max(1, len(assistant_reply.split()))
+        )
 
         # 7. Self-correction for factual intents
         corrected = False

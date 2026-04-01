@@ -1,10 +1,11 @@
 langchain
-langchain-openai
+langchain-google-genai
 langchain-community
 langchain-text-splitters
 langgraph
 chromadb
-openai
+sentence-transformers
+gradio
 python-dotenv
 pytest
 colorama

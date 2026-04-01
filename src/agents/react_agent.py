@@ -1,9 +1,18 @@
+import os
 from typing import Annotated
 from typing_extensions import TypedDict
 
-from langchain_openai import ChatOpenAI
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:  # pragma: no cover - dependency is installed in deployment
+    class ChatGoogleGenerativeAI:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "langchain_google_genai is not installed. Install project dependencies "
+                "to enable Gemini-backed agent execution."
+            )
 from langchain_core.tools import tool
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -108,7 +117,10 @@ def create_telecom_agent(retriever: TelecomRetriever):
           └── no calls ──► END
     """
     tools = build_tools(retriever)
-    llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0).bind_tools(tools)
+    llm = ChatGoogleGenerativeAI(
+        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        temperature=0,
+    ).bind_tools(tools)
 
     system_message = SystemMessage(content=AGENT_SYSTEM_PROMPT)
 
@@ -145,5 +157,5 @@ def create_telecom_agent(retriever: TelecomRetriever):
 def run_agent(retriever: TelecomRetriever, question: str) -> str:
     """Run the agent and return the final answer."""
     agent = create_telecom_agent(retriever)
-    result = agent.invoke({"messages": [("user", question)]})
+    result = agent.invoke({"messages": [HumanMessage(content=question)]})
     return result["messages"][-1].content

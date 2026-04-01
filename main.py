@@ -15,6 +15,8 @@ def ensure_indexed(persist_dir: str = "./chroma_db", data_dir: str = "./data"):
     """Index the knowledge base if it has not been indexed yet."""
     from src.rag.retriever import TelecomIndexer, TelecomRetriever
 
+    persist_dir = os.getenv("PERSIST_DIR", persist_dir)
+    data_dir = os.getenv("DATA_DIR", data_dir)
     retriever = TelecomRetriever(persist_dir=persist_dir)
     if not retriever.is_ready():
         print(f"{Fore.YELLOW}Indexing the knowledge base...{Style.RESET_ALL}")
@@ -160,8 +162,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print(f"{Fore.RED}Error: OPENAI_API_KEY is not set in .env{Style.RESET_ALL}")
+    if not os.getenv("GOOGLE_API_KEY"):
+        print(f"{Fore.RED}Error: GOOGLE_API_KEY is not set in .env{Style.RESET_ALL}")
         exit(1)
 
     modes = {
