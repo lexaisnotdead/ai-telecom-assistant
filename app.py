@@ -20,6 +20,7 @@ from src.rag.retriever import TelecomIndexer, TelecomRetriever
 PERSIST_DIR = os.getenv("PERSIST_DIR", "./chroma_db")
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
 
 theme = gr.themes.Soft(primary_hue="blue", secondary_hue="sky", neutral_hue="slate")
 CSS = """
@@ -52,14 +53,25 @@ CSS = """
 
 
 retriever = ensure_indexed(persist_dir=PERSIST_DIR, data_dir=DATA_DIR)
-dialog_manager = DialogManager(retriever=retriever)
+dialog_manager = None
+
+
+def get_dialog_manager():
+    """Create a Gemini-backed dialog manager only when credentials exist."""
+    global dialog_manager
+    if dialog_manager is not None:
+        return dialog_manager
+    if not GOOGLE_API_KEY:
+        return None
+    dialog_manager = DialogManager(retriever=retriever)
+    return dialog_manager
 
 
 def refresh_runtime():
     """Recreate the retriever and dialog manager after the index changes."""
     global retriever, dialog_manager
     retriever = TelecomRetriever(persist_dir=PERSIST_DIR)
-    dialog_manager = DialogManager(retriever=retriever)
+    dialog_manager = DialogManager(retriever=retriever) if GOOGLE_API_KEY else None
 
 
 def _session_key(prefix: str, request: gr.Request | None) -> str:
@@ -95,8 +107,38 @@ def chat_reply(message: str, history, request: gr.Request | None = None):
     if not message:
         return normalize_history(history)
 
+    if not GOOGLE_API_KEY:
+        history = normalize_history(history)
+        history.extend(
+            [
+                {"role": "user", "content": message},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Gemini is not configured for this Space yet. "
+                        "Please add GOOGLE_API_KEY in the Space secrets."
+                    ),
+                },
+            ]
+        )
+        return history
+
     session_id = _session_key("chat", request)
-    result = dialog_manager.chat(session_id=session_id, user_message=message)
+    manager = get_dialog_manager()
+    if manager is None:
+        history = normalize_history(history)
+        history.extend(
+            [
+                {"role": "user", "content": message},
+                {
+                    "role": "assistant",
+                    "content": "Gemini is not configured for this Space yet.",
+                },
+            ]
+        )
+        return history
+
+    result = manager.chat(session_id=session_id, user_message=message)
     history = normalize_history(history)
     history.extend(
         [
@@ -112,6 +154,22 @@ def agent_reply(message: str, history, request: gr.Request | None = None):
     message = (message or "").strip()
     if not message:
         return normalize_history(history)
+
+    if not GOOGLE_API_KEY:
+        history = normalize_history(history)
+        history.extend(
+            [
+                {"role": "user", "content": message},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Gemini is not configured for this Space yet. "
+                        "Please add GOOGLE_API_KEY in the Space secrets."
+                    ),
+                },
+            ]
+        )
+        return history
 
     answer = run_agent(retriever=retriever, question=message)
     history = normalize_history(history)

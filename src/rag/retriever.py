@@ -11,9 +11,13 @@ from pathlib import Path
 from typing import List
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain_core.documents import Document
+
+try:
+    from langchain_chroma import Chroma
+except ImportError:  # pragma: no cover - fallback for older environments
+    from langchain_community.vectorstores import Chroma
 
 try:
     from sentence_transformers import SentenceTransformer
