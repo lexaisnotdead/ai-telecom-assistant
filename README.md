@@ -20,6 +20,8 @@ The project now uses:
 - ChromaDB for vector storage
 - A local Python virtual environment for development
 
+**Link:** https://huggingface.co/spaces/aldiakonov/ai-telecom-assistant
+
 ## Implementation Details
 
 | Technology | File | Description |
